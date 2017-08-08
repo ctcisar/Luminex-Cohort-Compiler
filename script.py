@@ -1,4 +1,5 @@
 import openpyxl
+import configparser
 import os
 from numpy import average
 from numpy import std
@@ -6,15 +7,36 @@ from numpy import transpose
 
 # Config vars
 
-PROTOCOL_NAME = "2017_06_MESA_RA Panel 18_Exam 3"
-PLATE_COUNT = 11
-PLATE_TYPES = ['A','B']
-BEAD_CUTOFF = 25
-CV_WARNING = 10
-CV_WARNING_COLOR = openpyxl.styles.Color(rgb='FFFFA500')
-CV_ERROR = 25
-CV_ERROR_COLOR = openpyxl.styles.Color(rgb='FFFF0000')
-INCLUDE_PERPLATE_CONTROLS = True
+config = configparser.ConfigParser()
+config.read('scriptconfig.ini')
+
+# mandatory input vars
+
+PROTOCOL_NAME = config['input']['name']
+PLATE_COUNT = int(config['input']['plate_count'])
+PLATE_TYPES = config['input']['plate_types'].split(" ")
+
+def check_and_default(config,cat,key,default):
+    if key in config[cat].keys():
+        return config[cat][key]
+    else:
+        return default
+
+# analysis vars
+
+BEAD_CUTOFF = int(check_and_default(config,"analysis","bead_cutoff","25"))
+
+# output to file vars
+
+CV_WARNING = int(check_and_default(config,"output","cv_warning","10"))
+CV_WARNING_COLOR = openpyxl.styles.Color(rgb=check_and_default(config,"output","cv_warning_color",'FFFFA500'))
+CV_ERROR = int(check_and_default(config,"output","cv_error","25"))
+CV_ERROR_COLOR = openpyxl.styles.Color(rgb=check_and_default(config,"output","cv_error_color",'FFFF0000'))
+
+# debugging vars
+
+VERBOSE_OUTPUT = (check_and_default(config,'debugging','verbose_output','False') == 'True')
+INCLUDE_PERPLATE_CONTROLS = (check_and_default(config,'debugging','include_perplate_controls','False') == 'True')
 
 os.chdir("Luminex Documents")
 
@@ -32,11 +54,13 @@ for num in range(PLATE_COUNT):
         while ws.cell(row = currow, column = 3).value != "Description":
             currow = currow + 1
         currow = currow + 1
-        print("First row of data is "+str(currow))
+        if VERBOSE_OUTPUT:
+            print("First row of data is "+str(currow))
         if num == 0:
             for col in ws.iter_cols(min_row=currow-2, max_row=currow-2, min_col=4):
                 beadnames.extend([cell.value for cell in col if cell != None])
-            print("Current bead ID count is "+str(len(beadnames)))
+            if VERBOSE_OUTPUT:
+                print("Current bead ID count is "+str(len(beadnames)))
         
         beadrow = 1
         while wb["Bead Count"].cell(row = beadrow, column = 3).value != "Description":
@@ -45,7 +69,8 @@ for num in range(PLATE_COUNT):
         while wb["Bead Count"].cell(row = beadrow, column = 3).value != "Description":
             beadrow = beadrow + 1
         beadrow = beadrow + 1
-        print("First beadcount row is "+str(beadrow))
+        if VERBOSE_OUTPUT:
+            print("First beadcount row is "+str(beadrow))
 
         # go through and add samples to data()
         while ws.cell(row = currow, column = 3).value != None:
@@ -56,7 +81,8 @@ for num in range(PLATE_COUNT):
             while ws.cell(row = currow, column = curcol).value != None:
                 if wb["Bead Count"].cell(row = beadrow, column = curcol).value < BEAD_CUTOFF:
                     data[ID].append("NA")
-                    print(ID+" column number "+str(curcol)+" below bead threshold of "+str(BEAD_CUTOFF))
+                    if VERBOSE_OUTPUT:
+                        print(ID+" column number "+str(curcol)+" below bead threshold of "+str(BEAD_CUTOFF))
                 else:
                     data[ID].append(ws.cell(row = currow, column = curcol).value)
                 curcol = curcol + 1
@@ -95,7 +121,8 @@ for key in data.keys():
             controls[ID] = [[] for i in range(PLATE_COUNT)]
         controls[ID][plate-1]=data[key]
 
-print(str(len(controls.keys()))+" controls found")
+if VERBOSE_OUTPUT:
+    print(str(len(controls.keys()))+" controls found")
 
 for i in range(len(beadnames)):
     ws.cell(column = i+2, row = 1).value = beadnames[i]
