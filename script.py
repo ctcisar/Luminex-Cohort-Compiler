@@ -28,10 +28,14 @@ BEAD_CUTOFF = int(check_and_default(config,"analysis","bead_cutoff","25"))
 
 # output to file vars
 
-CV_WARNING = int(check_and_default(config,"output","cv_warning","10"))
-CV_WARNING_COLOR = openpyxl.styles.Color(rgb=check_and_default(config,"output","cv_warning_color",'FFFFA500'))
-CV_ERROR = int(check_and_default(config,"output","cv_error","25"))
-CV_ERROR_COLOR = openpyxl.styles.Color(rgb=check_and_default(config,"output","cv_error_color",'FFFF0000'))
+CV_WARNING = float(check_and_default(config,"output","cv_warning","10"))
+CV_ERROR = float(check_and_default(config,"output","cv_error","25"))
+
+ZSC_WARNING = float(check_and_default(config,"output","zsc_warning","1.5"))
+ZSC_ERROR = float(check_and_default(config,"output","zsc_error","2"))
+
+WARNING_COLOR = openpyxl.styles.Color(rgb=check_and_default(config,"output","WARNING_COLOR",'FFFFA500'))
+ERROR_COLOR = openpyxl.styles.Color(rgb=check_and_default(config,"output","ERROR_COLOR",'FFFF0000'))
 
 # debugging vars
 
@@ -132,22 +136,34 @@ for i in range(len(beadnames)):
 currow = 2
 for key in controls.keys():
     per_bead = transpose(controls[key])
+    temp_bead = list()
+    for i in range(len(beadnames)):
+        temp_bead.append([float(z) for z in per_bead[i] if z != "NA"])
     if(INCLUDE_PERPLATE_CONTROLS):
         for plate in range(len(per_bead[0])):
             ws.cell(column = 1, row = currow).value = "Plate " + str(plate+1)
             for bead in range(len(per_bead)):
                 ws.cell(column = bead + 2, row = currow).value = per_bead[bead][plate]
+                if(per_bead[bead][plate]!='NA'):
+                    zscore = abs(float(per_bead[bead][plate])-average(temp_bead[bead]))/std(temp_bead[bead])
+                    if zscore > ZSC_ERROR:
+                        ws.cell(column = bead + 2, row = currow).font = openpyxl.styles.Font(color=ERROR_COLOR)
+                    elif zscore > ZSC_WARNING:
+                        ws.cell(column = bead + 2, row = currow).font = openpyxl.styles.Font(color=WARNING_COLOR)
+                else:
+                    ws.cell(column = bead + 2, row = currow).font = openpyxl.styles.Font(color=ERROR_COLOR)
             currow = currow + 1
     ws.cell(column = 1, row = currow).value = key
     ws.cell(column = 1, row = currow).font = openpyxl.styles.Font(bold=True)
     for i in range(len(beadnames)):
-        temp_bead = [float(z) for z in per_bead[i] if z != "NA"]
-        CV = std(temp_bead)/average(temp_bead)*100
+        CV = std(temp_bead[i])/average(temp_bead[i])*100
         ws.cell(column = i+2, row = currow).value = CV
         if CV >= CV_ERROR:
-            ws.cell(column = i+2, row = currow).font = openpyxl.styles.Font(color=CV_ERROR_COLOR)
+            ws.cell(column = i+2, row = currow).font = openpyxl.styles.Font(color=ERROR_COLOR, bold=INCLUDE_PERPLATE_CONTROLS)
         elif CV >= CV_WARNING:
-            ws.cell(column = i+2, row = currow).font = openpyxl.styles.Font(color=CV_WARNING_COLOR)
+            ws.cell(column = i+2, row = currow).font = openpyxl.styles.Font(color=WARNING_COLOR, bold=INCLUDE_PERPLATE_CONTROLS)
+        else:
+            ws.cell(column = i+2, row = currow).font = openpyxl.styles.Font(bold=INCLUDE_PERPLATE_CONTROLS)
     currow = currow + 1
 
 print("Generating master sheet")
