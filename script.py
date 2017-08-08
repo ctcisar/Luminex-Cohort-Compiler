@@ -41,6 +41,7 @@ ERROR_COLOR = openpyxl.styles.Color(rgb=check_and_default(config,"output","ERROR
 
 VERBOSE_OUTPUT = (check_and_default(config,'debugging','verbose_output','False') == 'True')
 INCLUDE_PERPLATE_CONTROLS = (check_and_default(config,'debugging','include_perplate_controls','False') == 'True')
+TALLY_PERPLATE_NA = (check_and_default(config,'debugging','tally_perplate_na','False') == 'True')
 
 os.chdir("Luminex Documents")
 
@@ -77,6 +78,7 @@ for num in range(PLATE_COUNT):
             print("First beadcount row is "+str(beadrow))
 
         # go through and add samples to data()
+        perplate_na = 0
         while ws.cell(row = currow, column = 3).value != None:
             ID = str(num+1) + "_" + str(ws.cell(row = currow, column = 3).value)
             if ID not in data.keys():
@@ -85,6 +87,7 @@ for num in range(PLATE_COUNT):
             while ws.cell(row = currow, column = curcol).value != None:
                 if wb["Bead Count"].cell(row = beadrow, column = curcol).value < BEAD_CUTOFF:
                     data[ID].append("NA")
+                    perplate_na = perplate_na + 1
                     if VERBOSE_OUTPUT:
                         print(ID+" column number "+str(curcol)+" below bead threshold of "+str(BEAD_CUTOFF))
                 else:
@@ -92,6 +95,8 @@ for num in range(PLATE_COUNT):
                 curcol = curcol + 1
             currow = currow + 1
             beadrow = beadrow + 1
+        if(TALLY_PERPLATE_NA):
+            print("Plate "+platename+" low beadcounts: "+str(perplate_na))
 
 os.chdir("..")
 print("Generating combined workbook")
