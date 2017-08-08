@@ -131,7 +131,11 @@ if VERBOSE_OUTPUT:
 for i in range(len(beadnames)):
     ws.cell(column = i+2, row = 1).value = beadnames[i]
     ws.cell(column = i+2, row = 1).font = openpyxl.styles.Font(bold=True)
-
+if(INCLUDE_PERPLATE_CONTROLS):
+    ws.cell(column = len(beadnames)+2, row = 1).value = "ERROR COUNT"
+    ws.cell(column = len(beadnames)+2, row = 1).font = openpyxl.styles.Font(bold=True)
+    ws.cell(column = len(beadnames)+3, row = 1).value = "ERROR+WARNING COUNT"
+    ws.cell(column = len(beadnames)+3, row = 1).font = openpyxl.styles.Font(bold=True)
 
 currow = 2
 for key in controls.keys():
@@ -141,17 +145,23 @@ for key in controls.keys():
         temp_bead.append([float(z) for z in per_bead[i] if z != "NA"])
     if(INCLUDE_PERPLATE_CONTROLS):
         for plate in range(len(per_bead[0])):
+            zsc_err_count = 0
+            zsc_war_count = 0
             ws.cell(column = 1, row = currow).value = "Plate " + str(plate+1)
             for bead in range(len(per_bead)):
                 ws.cell(column = bead + 2, row = currow).value = per_bead[bead][plate]
                 if(per_bead[bead][plate]!='NA'):
                     zscore = abs(float(per_bead[bead][plate])-average(temp_bead[bead]))/std(temp_bead[bead])
                     if zscore > ZSC_ERROR:
+                        zsc_err_count = zsc_err_count + 1
                         ws.cell(column = bead + 2, row = currow).font = openpyxl.styles.Font(color=ERROR_COLOR)
                     elif zscore > ZSC_WARNING:
+                        zsc_war_count = zsc_war_count + 1
                         ws.cell(column = bead + 2, row = currow).font = openpyxl.styles.Font(color=WARNING_COLOR)
                 else:
                     ws.cell(column = bead + 2, row = currow).font = openpyxl.styles.Font(color=ERROR_COLOR)
+            ws.cell(column = len(beadnames)+2, row = currow).value = zsc_err_count
+            ws.cell(column = len(beadnames)+3, row = currow).value = zsc_war_count + zsc_err_count
             currow = currow + 1
     ws.cell(column = 1, row = currow).value = key
     ws.cell(column = 1, row = currow).font = openpyxl.styles.Font(bold=True)
