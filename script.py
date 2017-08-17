@@ -22,6 +22,13 @@ def check_and_default(config,cat,key,default):
     else:
         return default
 
+def is_number(s):
+    try:
+        float(s)
+        return True
+    except ValueError:
+        return False
+
 # analysis vars
 
 BEAD_CUTOFF = int(check_and_default(config,"analysis","bead_cutoff","25"))
@@ -86,15 +93,32 @@ for num in range(PLATE_COUNT):
             curcol = 4
             while ws.cell(row = currow, column = curcol).value != None:
                 if wb["Bead Count"].cell(row = beadrow, column = curcol).value < BEAD_CUTOFF:
-                    data[ID].append("NA")
-                    perplate_na = perplate_na + 1
-                    if VERBOSE_OUTPUT:
-                        print(ID+" column number "+str(curcol)+" below bead threshold of "+str(BEAD_CUTOFF))
+                    if "Control" in str(ws.cell(row = currow, column = 3).value):
+                        if wb["Bead Count"].cell(row = beadrow+1, column = curcol).value < BEAD_CUTOFF:
+                            data[ID].append("NA")
+                            perplate_na = perplate_na + 1
+                            if VERBOSE_OUTPUT:
+                                print(ID+" column number "+str(curcol)+" below bead threshold of "+str(BEAD_CUTOFF))
+                        else:
+                            data[ID].append(ws.cell(row = currow, column = curcol).value)
+                    else:
+                        data[ID].append("NA")
+                        perplate_na = perplate_na + 1
+                        if VERBOSE_OUTPUT:
+                            print(ID+" column number "+str(curcol)+" below bead threshold of "+str(BEAD_CUTOFF))
+                        
                 else:
-                    data[ID].append(ws.cell(row = currow, column = curcol).value)
+                    if is_number(ws.cell(row = currow, column = curcol).value):
+                        data[ID].append(ws.cell(row = currow, column = curcol).value)
+                    else:
+                        if VERBOSE_OUTPUT:
+                            print(ID+" column number "+str(curcol)+" is NaN")
+                        data[ID].append("NA")
+                    
                 curcol = curcol + 1
+            beadrow = beadrow + len(ws.cell(row = currow, column =2).value.split(","))
             currow = currow + 1
-            beadrow = beadrow + 1
+            # need to add rows equal to the number of wells being averaged, otherwise procession will be uneven
         if(TALLY_PERPLATE_NA):
             print("Plate "+platename+" low beadcounts: "+str(perplate_na))
 
@@ -192,16 +216,16 @@ for key in data.keys():
         numbers.append(data[key])
 
 for i in range(len(samples)):
-    ws.cell(column = i+2, row = 1).value = samples[i]
-    ws.cell(column = i+2, row = 1).font = openpyxl.styles.Font(bold=True)
-
-for i in range(len(beadnames)):
-    ws.cell(column = 1, row = i+2).value = beadnames[i]
+    ws.cell(column = 1, row = i+2).value = samples[i]
     ws.cell(column = 1, row = i+2).font = openpyxl.styles.Font(bold=True)
 
-for row in range(len(numbers)):
-    for col in range(len(numbers[row])):
-        ws.cell(column = row+2, row = col+2).value = numbers[row][col]
+for i in range(len(beadnames)):
+    ws.cell(column = i+2, row = 1).value = beadnames[i]
+    ws.cell(column = i+2, row = 1).font = openpyxl.styles.Font(bold=True)
+
+for col in range(len(numbers)):
+    for row in range(len(numbers[col])):
+        ws.cell(column = row+2, row = col+2).value = numbers[col][row]
 
 wb.save(PROTOCOL_NAME+"_results_combined.xlsx")
 print(PROTOCOL_NAME+"_results_combined.xlsx saved")
