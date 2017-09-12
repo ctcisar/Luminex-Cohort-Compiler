@@ -23,6 +23,8 @@ def check_and_default(config,cat,key,default):
         return default
 
 def is_number(s):
+    if s is None:
+        return False
     try:
         float(s)
         return True
@@ -49,10 +51,12 @@ ERROR_COLOR = openpyxl.styles.Color(rgb=check_and_default(config,"output","ERROR
 VERBOSE_OUTPUT = (check_and_default(config,'debugging','verbose_output','False') == 'True')
 INCLUDE_PERPLATE_CONTROLS = (check_and_default(config,'debugging','include_perplate_controls','False') == 'True')
 TALLY_PERPLATE_NA = (check_and_default(config,'debugging','tally_perplate_na','False') == 'True')
+BEADCOUNT_SHEET = (check_and_default(config,'debugging','beadcount_sheet','False') == 'True')
 
 os.chdir("Luminex Documents")
 
 data = dict()
+beadcounts = dict()
 beadnames = list()
 for num in range(PLATE_COUNT):
     for typ in PLATE_TYPES:
@@ -90,9 +94,11 @@ for num in range(PLATE_COUNT):
             ID = str(num+1) + "_" + str(ws.cell(row = currow, column = 3).value)
             if ID not in data.keys():
                 data[ID] = list()
+                beadcounts[ID] = list()
             curcol = 4
             while ws.cell(row = currow, column = curcol).value != None:
-                if wb["Bead Count"].cell(row = beadrow, column = curcol).value < BEAD_CUTOFF:
+                beadcounts[ID].append(wb["Bead Count"].cell(row = beadrow, column = curcol).value)
+                if wb["Bead Count"].cell(row = beadrow, column = curcol).value is not None and wb["Bead Count"].cell(row = beadrow, column = curcol).value < BEAD_CUTOFF:
                     if "Control" in str(ws.cell(row = currow, column = 3).value):
                         if wb["Bead Count"].cell(row = beadrow+1, column = curcol).value < BEAD_CUTOFF:
                             data[ID].append("NA")
@@ -139,6 +145,23 @@ for key in data.keys():
     for i in range(len(data[key])):
         ws.cell(column = 2+i, row = currow).value = data[key][i]
     currow = currow + 1
+
+if(BEADCOUNT_SHEET):
+    ws = wb.create_sheet("beadcounts")
+
+    for i in range(len(beadnames)):
+        ws.cell(column = i+2, row = 1).value = beadnames[i]
+        ws.cell(column = i+2, row = 1).font = openpyxl.styles.Font(bold=True)
+
+    currow = 2
+    for key in data.keys():
+        ws.cell(column = 1, row = currow).value = key
+        for i in range(len(data[key])):
+            ws.cell(column = 2+i, row = currow).value = beadcounts[key][i]
+            if(not is_number(ws.cell(column = 2+i, row = currow).value) or ws.cell(column = 2+i, row = currow).value < BEAD_CUTOFF):
+                ws.cell(column = 2+i, row = currow).font = openpyxl.styles.Font(color=ERROR_COLOR)
+        currow = currow + 1
+    
 
 print("Generating CVs sheet")
 ws = wb.create_sheet("CVs")
