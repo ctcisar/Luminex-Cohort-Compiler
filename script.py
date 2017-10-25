@@ -34,6 +34,9 @@ def is_number(s):
 # analysis vars
 
 BEAD_CUTOFF = int(check_and_default(config,"analysis","bead_cutoff","25"))
+CONTROL_NAMES = check_and_default(config,"analysis","control_names",False)
+if CONTROL_NAMES is not False:
+    CONTROL_NAMES = CONTROL_NAMES.split(",")
 
 # output to file vars
 
@@ -91,7 +94,8 @@ for num in range(PLATE_COUNT):
         # go through and add samples to data()
         perplate_na = 0
         while ws.cell(row = currow, column = 3).value != None:
-            ID = str(num+1) + "_" + str(ws.cell(row = currow, column = 3).value)
+            clean_name = ws.cell(row = currow, column = 3).value.replace("_","-")
+            ID = str(num+1) + "_" + str(clean_name)
             if ID not in data.keys():
                 data[ID] = list()
                 beadcounts[ID] = list()
@@ -170,12 +174,20 @@ print("Compiling control data")
 
 controls = dict()
 for key in data.keys():
-    if "Control" in key or "control" in key:
-        plate = int(key.split("_")[0])
-        ID = key.split("_")[1]
-        if ID not in controls.keys():
-            controls[ID] = [[] for i in range(PLATE_COUNT)]
-        controls[ID][plate-1]=data[key]
+    if CONTROL_NAMES is False:
+        if "Control" in key or "control" in key:
+            plate = int(key.split("_")[0])
+            ID = key.split("_")[1]
+            if ID not in controls.keys():
+                controls[ID] = [[] for i in range(PLATE_COUNT)]
+            controls[ID][plate-1]=data[key]
+    else:
+        if len([i for i in CONTROL_NAMES if i in key]) > 0:
+            plate = int(key.split("_")[0])
+            ID = key.split("_")[1]
+            if ID not in controls.keys():
+                controls[ID] = [[] for i in range(PLATE_COUNT)]
+            controls[ID][plate-1]=data[key]
 
 if VERBOSE_OUTPUT:
     print(str(len(controls.keys()))+" controls found")
