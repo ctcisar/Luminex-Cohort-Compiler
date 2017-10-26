@@ -37,6 +37,7 @@ BEAD_CUTOFF = int(check_and_default(config,"analysis","bead_cutoff","25"))
 CONTROL_NAMES = check_and_default(config,"analysis","control_names",False)
 if CONTROL_NAMES is not False:
     CONTROL_NAMES = CONTROL_NAMES.split(",")
+COMBINE_CONTROLS = (check_and_default(config,'analysis','combine_controls','False') == 'True')
 
 # output to file vars
 
@@ -178,9 +179,17 @@ for key in data.keys():
         if "Control" in key or "control" in key:
             plate = int(key.split("_")[0])
             ID = key.split("_")[1]
+            if COMBINE_CONTROLS is True:
+                ID = ID.split("-")[0]
             if ID not in controls.keys():
-                controls[ID] = [[] for i in range(PLATE_COUNT)]
-            controls[ID][plate-1]=data[key]
+                if COMBINE_CONTROLS is True:
+                    controls[ID] = list()
+                else:
+                    controls[ID] = [[] for i in range(PLATE_COUNT)]
+            if COMBINE_CONTROLS is True:
+                controls[ID].append(data[key])
+            else:
+                controls[ID][plate-1]=data[key]
     else:
         if len([i for i in CONTROL_NAMES if i in key]) > 0:
             plate = int(key.split("_")[0])
