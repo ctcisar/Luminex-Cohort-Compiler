@@ -255,7 +255,7 @@ ws = wb.create_sheet("master")
 numbers = list()
 samples = list()
 for key in data.keys():
-    if not ("Control" in key or "control" in key):
+    if not ((CONTROL_NAMES is False and ("Control" in key or "control" in key)) or (CONTROL_NAMES is not False and (len([i for i in CONTROL_NAMES if i in key]) > 0))):
         samples.append(key.split("_")[1])
         numbers.append(data[key])
 
