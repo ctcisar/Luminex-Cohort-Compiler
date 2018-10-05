@@ -95,7 +95,7 @@ for num in range(PLATE_COUNT):
         # go through and add samples to data()
         perplate_na = 0
         while ws.cell(row = currow, column = 3).value != None:
-            clean_name = ws.cell(row = currow, column = 3).value.replace("_","-")
+            clean_name = str(ws.cell(row = currow, column = 3).value).replace("_","-")
             ID = str(num+1) + "_" + str(clean_name)
             if ID not in data.keys():
                 data[ID] = list()
