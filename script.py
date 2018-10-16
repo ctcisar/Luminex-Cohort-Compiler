@@ -3,7 +3,9 @@ import configparser
 import os
 from numpy import average
 from numpy import std
+from numpy import isnan
 from numpy import transpose
+from scipy.optimize import minimize
 
 # Config vars
 
@@ -31,6 +33,10 @@ def is_number(s):
     except ValueError:
         return False
 
+def avg_no_na(s):
+    x = [n for n in s if is_number(n) and not isnan(n)]
+    return average(x)
+
 # analysis vars
 
 BEAD_CUTOFF = int(check_and_default(config,"analysis","bead_cutoff","25"))
@@ -38,6 +44,8 @@ CONTROL_NAMES = check_and_default(config,"analysis","control_names",False)
 if CONTROL_NAMES is not False:
     CONTROL_NAMES = CONTROL_NAMES.split(",")
 COMBINE_CONTROLS = (check_and_default(config,'analysis','combine_controls','False') == 'True')
+NORMALIZE_CVS = (check_and_default(config,'analysis','normalize_cvs','False') == 'True')
+
 
 # output to file vars
 
@@ -56,6 +64,7 @@ VERBOSE_OUTPUT = (check_and_default(config,'debugging','verbose_output','False')
 INCLUDE_PERPLATE_CONTROLS = (check_and_default(config,'debugging','include_perplate_controls','False') == 'True')
 TALLY_PERPLATE_NA = (check_and_default(config,'debugging','tally_perplate_na','False') == 'True')
 BEADCOUNT_SHEET = (check_and_default(config,'debugging','beadcount_sheet','False') == 'True')
+SAVE_ALL_CVS = (check_and_default(config,'debugging','save_all_cvs','False') == 'True') #only applicable for normalize_cvs = true
 
 os.chdir("Luminex Documents")
 
@@ -168,8 +177,6 @@ if(BEADCOUNT_SHEET):
         currow = currow + 1
     
 
-print("Generating CVs sheet")
-ws = wb.create_sheet("CVs")
 
 print("Compiling control data")
 
@@ -201,53 +208,88 @@ for key in data.keys():
 if VERBOSE_OUTPUT:
     print(str(len(controls.keys()))+" controls found")
 
-for i in range(len(beadnames)):
-    ws.cell(column = i+2, row = 1).value = beadnames[i]
-    ws.cell(column = i+2, row = 1).font = openpyxl.styles.Font(bold=True)
-if(INCLUDE_PERPLATE_CONTROLS):
-    ws.cell(column = len(beadnames)+2, row = 1).value = "ERROR COUNT"
-    ws.cell(column = len(beadnames)+2, row = 1).font = openpyxl.styles.Font(bold=True)
-    ws.cell(column = len(beadnames)+3, row = 1).value = "ERROR+WARNING COUNT"
-    ws.cell(column = len(beadnames)+3, row = 1).font = openpyxl.styles.Font(bold=True)
+cvs_callcount = 0
+platecoeffs = [1.0] * PLATE_COUNT
+def cvs(platecoeffs): #this is so ugly I am so sorry. but I don't want to rewrite all of this
+    global cvs_callcount
+    global wb
+    cvs_callcount = cvs_callcount + 1
+    savesheet = SAVE_ALL_CVS or cvs_callcount < 2
+    print("Generating CVs sheet #"+str(cvs_callcount))
+    if savesheet:
+        ws = wb.create_sheet("CVs " + str(cvs_callcount))
+        for i in range(len(beadnames)):
+            ws.cell(column = i+2, row = 1).value = beadnames[i]
+            ws.cell(column = i+2, row = 1).font = openpyxl.styles.Font(bold=True)
+        if(INCLUDE_PERPLATE_CONTROLS):
+            ws.cell(column = len(beadnames)+2, row = 1).value = "ERROR COUNT"
+            ws.cell(column = len(beadnames)+2, row = 1).font = openpyxl.styles.Font(bold=True)
+            ws.cell(column = len(beadnames)+3, row = 1).value = "ERROR+WARNING COUNT"
+            ws.cell(column = len(beadnames)+3, row = 1).font = openpyxl.styles.Font(bold=True)
+            ws.cell(column = len(beadnames)+4, row = 1).value = "Normalization coeff"
+            ws.cell(column = len(beadnames)+4, row = 1).font = openpyxl.styles.Font(bold=True)
 
-currow = 2
-for key in controls.keys():
-    per_bead = transpose(controls[key])
-    temp_bead = list()
-    for i in range(len(beadnames)):
-        temp_bead.append([float(z) for z in per_bead[i] if z != "NA"])
-    if(INCLUDE_PERPLATE_CONTROLS):
-        for plate in range(len(per_bead[0])):
-            zsc_err_count = 0
-            zsc_war_count = 0
-            ws.cell(column = 1, row = currow).value = "Plate " + str(plate+1)
-            for bead in range(len(per_bead)):
-                ws.cell(column = bead + 2, row = currow).value = per_bead[bead][plate]
-                if(per_bead[bead][plate]!='NA'):
-                    zscore = abs(float(per_bead[bead][plate])-average(temp_bead[bead]))/std(temp_bead[bead])
-                    if zscore > ZSC_ERROR:
-                        zsc_err_count = zsc_err_count + 1
-                        ws.cell(column = bead + 2, row = currow).font = openpyxl.styles.Font(color=ERROR_COLOR)
-                    elif zscore > ZSC_WARNING:
-                        zsc_war_count = zsc_war_count + 1
-                        ws.cell(column = bead + 2, row = currow).font = openpyxl.styles.Font(color=WARNING_COLOR)
+    currow = 2
+    allcvs = list()
+    for key in controls.keys():        
+        applycoeff = [list() for l in controls[key]]
+        for i in range(len(applycoeff)):
+            applycoeff[i] = [platecoeffs[i] * n if n != 'NA' else 'NA' for n in controls[key][i]]
+        per_bead = transpose(applycoeff)
+        temp_bead = list()
+        for i in range(len(beadnames)):
+            temp_bead.append([float(z) for z in per_bead[i] if z != "NA"])
+        if savesheet:
+            if(INCLUDE_PERPLATE_CONTROLS):
+                for plate in range(len(per_bead[0])):
+                    zsc_err_count = 0
+                    zsc_war_count = 0
+                    ws.cell(column = 1, row = currow).value = "Plate " + str(plate+1)
+                    for bead in range(len(per_bead)):
+                        ws.cell(column = bead + 2, row = currow).value = per_bead[bead][plate]
+                        if(per_bead[bead][plate]!='NA'):
+                            zscore = abs(float(per_bead[bead][plate])-average(temp_bead[bead]))/std(temp_bead[bead])
+                            if zscore > ZSC_ERROR:
+                                zsc_err_count = zsc_err_count + 1
+                                ws.cell(column = bead + 2, row = currow).font = openpyxl.styles.Font(color=ERROR_COLOR)
+                            elif zscore > ZSC_WARNING:
+                                zsc_war_count = zsc_war_count + 1
+                                ws.cell(column = bead + 2, row = currow).font = openpyxl.styles.Font(color=WARNING_COLOR)
+                        else:
+                            ws.cell(column = bead + 2, row = currow).font = openpyxl.styles.Font(color=ERROR_COLOR)
+                    ws.cell(column = len(beadnames)+2, row = currow).value = zsc_err_count
+                    ws.cell(column = len(beadnames)+3, row = currow).value = zsc_war_count + zsc_err_count
+                    ws.cell(column = len(beadnames)+4, row = currow).value = platecoeffs[plate]
+                    currow = currow + 1
+            ws.cell(column = 1, row = currow).value = key
+            ws.cell(column = 1, row = currow).font = openpyxl.styles.Font(bold=True)
+        for i in range(len(beadnames)):
+            CV = std(temp_bead[i])/average(temp_bead[i])*100
+            allcvs.append(CV)
+            if savesheet:
+                ws.cell(column = i+2, row = currow).value = CV
+                if CV >= CV_ERROR:
+                    ws.cell(column = i+2, row = currow).font = openpyxl.styles.Font(color=ERROR_COLOR, bold=INCLUDE_PERPLATE_CONTROLS)
+                elif CV >= CV_WARNING:
+                    ws.cell(column = i+2, row = currow).font = openpyxl.styles.Font(color=WARNING_COLOR, bold=INCLUDE_PERPLATE_CONTROLS)
                 else:
-                    ws.cell(column = bead + 2, row = currow).font = openpyxl.styles.Font(color=ERROR_COLOR)
-            ws.cell(column = len(beadnames)+2, row = currow).value = zsc_err_count
-            ws.cell(column = len(beadnames)+3, row = currow).value = zsc_war_count + zsc_err_count
+                    ws.cell(column = i+2, row = currow).font = openpyxl.styles.Font(bold=INCLUDE_PERPLATE_CONTROLS)
+        if savesheet:
             currow = currow + 1
-    ws.cell(column = 1, row = currow).value = key
-    ws.cell(column = 1, row = currow).font = openpyxl.styles.Font(bold=True)
-    for i in range(len(beadnames)):
-        CV = std(temp_bead[i])/average(temp_bead[i])*100
-        ws.cell(column = i+2, row = currow).value = CV
-        if CV >= CV_ERROR:
-            ws.cell(column = i+2, row = currow).font = openpyxl.styles.Font(color=ERROR_COLOR, bold=INCLUDE_PERPLATE_CONTROLS)
-        elif CV >= CV_WARNING:
-            ws.cell(column = i+2, row = currow).font = openpyxl.styles.Font(color=WARNING_COLOR, bold=INCLUDE_PERPLATE_CONTROLS)
-        else:
-            ws.cell(column = i+2, row = currow).font = openpyxl.styles.Font(bold=INCLUDE_PERPLATE_CONTROLS)
-    currow = currow + 1
+    if VERBOSE_OUTPUT:
+        print("Average CV: "+str(avg_no_na(allcvs)))
+    return allcvs
+
+cvs(platecoeffs)
+
+if NORMALIZE_CVS:
+    print("Minimizing average CV")
+    avgcvs = lambda x: avg_no_na(cvs(x))
+    output = minimize(avgcvs, [1.0] * PLATE_COUNT)
+    platecoeffs = output.x
+    #reset callcount to save final CV sheet with ID 0 (lil janky but egh)
+    cvs_callcount = -1
+    cvs(platecoeffs)
 
 print("Generating master sheet")
 ws = wb.create_sheet("master")
@@ -257,7 +299,11 @@ samples = list()
 for key in data.keys():
     if not ((CONTROL_NAMES is False and ("Control" in key or "control" in key)) or (CONTROL_NAMES is not False and (len([i for i in CONTROL_NAMES if i in key]) > 0))):
         samples.append(key.split("_")[1])
-        numbers.append(data[key])
+        if NORMALIZE_CVS:
+            plate = int(key.split("_")[0])-1
+            numbers.append([n*platecoeffs[plate] if n != 'NA' else 'NA' for n in data[key]])
+        else:
+            numbers.append(data[key])
 
 for i in range(len(samples)):
     ws.cell(column = 1, row = i+2).value = samples[i]
