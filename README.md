@@ -13,6 +13,7 @@
   4.2 [analysis]
   4.3 [output]
   4.4 [debugging]
+5. Known Issues
 
 ==1. OVERVIEW AND USAGE
 
@@ -106,3 +107,7 @@ include_perplate_controls (False) - Adds each plate's control values to "CV" she
 tally_perplate_na (False) - Prints the number of datapoints that were ommitted because of low bead count for each plate in the shell.
 beadcount_sheet (False) - Adds a sheet to "[name]_combined.xlsx" with the beadcount of each sample.
 save_all_cvs (False) - If normalize_cvs is True, will also save the intermediate CV sheets while iterating to find local minimum to "[name]_combined.xlsx". Slows down script a lot.
+
+==5. KNOWN ISSUES
+
+Enabling analysis/combine_controls breaks both debugging/include_perplate_controls and analysis/normalize_cvs.  

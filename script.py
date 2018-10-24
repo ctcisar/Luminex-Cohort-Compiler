@@ -217,6 +217,9 @@ def cvs(platecoeffs): #this is so ugly I am so sorry. but I don't want to rewrit
     savesheet = SAVE_ALL_CVS or cvs_callcount < 2
     print("Generating CVs sheet #"+str(cvs_callcount))
     if savesheet:
+        if cvs_callcount == 0:
+            for plate in range(len(platecoeffs)):
+                print("Plate " +str(plate)+ " coeff: " +str(platecoeffs[plate]))
         ws = wb.create_sheet("CVs " + str(cvs_callcount))
         for i in range(len(beadnames)):
             ws.cell(column = i+2, row = 1).value = beadnames[i]
