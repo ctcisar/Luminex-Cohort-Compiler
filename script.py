@@ -114,7 +114,7 @@ for num in range(PLATE_COUNT):
                 beadcounts[ID].append(wb["Bead Count"].cell(row = beadrow, column = curcol).value)
                 if wb["Bead Count"].cell(row = beadrow, column = curcol).value is not None and wb["Bead Count"].cell(row = beadrow, column = curcol).value < BEAD_CUTOFF:
                     if "Control" in str(ws.cell(row = currow, column = 3).value):
-                        if wb["Bead Count"].cell(row = beadrow+1, column = curcol).value < BEAD_CUTOFF:
+                        if not is_number(wb["Bead Count"].cell(row = beadrow+1, column = curcol).value) or wb["Bead Count"].cell(row = beadrow+1, column = curcol).value < BEAD_CUTOFF:
                             data[ID].append("NA")
                             perplate_na = perplate_na + 1
                             if VERBOSE_OUTPUT:
